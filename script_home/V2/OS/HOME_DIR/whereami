@@ -1,0 +1,43 @@
+#!/bin/bash
+
+LC_ALL=C
+set -u
+interface=eth1
+
+if [ -t 0 ]; then
+    #
+    #	Codes couleurs ANSI (ne fonctionnent pas avec screen)
+    #
+    col_reset=$'\x1b[m'
+    col_green=$'\x1b[32;40;1m'
+    col_yellow=$'\x1b[33;40;1m'
+    col_magenta=$'\x1b[35;40;1m'
+    col_red=$'\x1b[31;40;1m'
+else
+    #
+    #	Codes couleurs screen
+    #
+    col_reset=$'\x05{=r dd}'
+    col_green=$'\x05{=b gw}'
+    col_yellow=$'\x05{=b yw}'
+    col_magenta=$'\x05{=bB mw}'
+    col_red=$'\x05{=bB rw}'
+fi
+
+my_dist=$(lsb_release --short --id --codename --release) || my_dist="OS INCONNU - installer lsb-release"
+my_dist=$(echo $my_dist)		# Remplace les sauts de ligne par un espace
+my_host=$(hostname -s).$(hostname -d)	# Pas "hostname -f" car fonctionne mal sur les machines mal configurées
+
+my_ip=${1:-}
+if [ -z "$my_ip" ]; then
+	# my_ip=$(ip addr show dev eth0 | sed -n -r 's|^\s+inet ([0-9.]+).* eth0$|\1|p; T; q')
+	# my_ip=$(ifconfig | sed -r '/inet addr:/ !d; /inet addr:127/ d; s/[^:]+:([0-9.]+).*/\1/; q')
+	my_ip=$(ifconfig $interface|xargs|awk '{print $7}'|sed -e 's/[a-z]*:/''/')
+	# my_ip=${my_ip:-IP INCONNUE}
+fi
+
+	my_loc="*** ***"
+	my_col=$col_green
+
+# echo "$my_host - $my_loc - $my_ip"
+echo "$my_col  $my_host ($my_dist) - $my_loc - $my_ip  $col_reset"

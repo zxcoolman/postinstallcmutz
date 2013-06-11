@@ -1,0 +1,177 @@
+#!/bin/bash
+#
+#	TODO:
+#	- Suivre la procédure du wiki
+
+set -ue
+export LC_ALL=C
+
+################################################################################
+#
+#	Changement de la durée de conservation de /tmp
+#
+
+sed -i 's/^TMPTIME=0$/TMPTIME=9/' /etc/default/rcS
+
+################################################################################
+#
+#	Installation des locales
+#
+
+sed -r -i '
+$ a\
+en_US.UTF-8 UTF-8\
+fr_FR.UTF-8 UTF-8
+
+/^(fr_FR|en_US).UTF-8/ d
+' /etc/locale.gen	\
+&& locale-gen
+
+################################################################################
+#
+#	Activation de la console pour les machines virtuelles
+#
+
+if ! fgrep -q 'VC0:' /etc/inittab; then
+    sed -r -i '
+	/^si::sysinit/ a\
+\
+#XH# Emergency console on serial port (virsh console ...)\
+# VC0:S12345:respawn:/sbin/getty -L ttyS0 115200
+    ' /etc/inittab
+fi
+
+{ read; read root_dev xxx; } < <(df -P /)
+if [[ "$root_dev" == /dev/vda* ]]; then
+    echo "NOTICE: ceci est une machine virtuelle => activation de la console de secours sur ttyS0" >&2
+    sed -i 's/^#\s*VC0:/VC0:/' /etc/inittab	\
+    && init q
+fi
+
+################################################################################
+#
+#	Configuration du noyau via procps / sysctl
+#	Faite désormais par copie de fichiers mais on relance l'initscript.
+#
+
+rm -f /etc/sysctl.d/celya.conf /etc/sysctl.d/99*celya.conf
+
+service=procps
+action=restart
+[ -f "/etc/init.d/$service" ] && invoke-rc.d "$service" "$action"
+
+################################################################################
+#
+#	Creation des fichiers de sources APT non officielles
+#
+
+if ! debian_dist=$(lsb_release --codename --short); then
+    echo "WARNING: unable to find out the distribution codename" >&2
+    debian_dist=UNKNOWN_DISTRIB_CODENAME
+fi
+
+dest_file=/etc/apt/sources.list.d/backports.list
+if [ -e "$dest_file" ]; then
+    echo "WARNING: '$dest_file' already exists and is left unchanged" >&2
+else
+    cat <<- _END_ > "$dest_file"
+	# deb http://backports.debian.org/debian-backports/ $debian_dist-backports main non-free contrib
+	# deb-src http://backports.debian.org/debian-backports/ $debian_dist-backports main non-free contrib
+	_END_
+fi
+
+dest_file=/etc/apt/sources.list.d/archives_debian.list
+if [ -e "$dest_file" ]; then
+    echo "WARNING: '$dest_file' already exists and is left unchanged" >&2
+else
+    cat <<- _END_ > "$dest_file"
+	## Archives Debian lorsque la distribution n'est plus maintenue
+	# deb http://archive.debian.org/debian/ $debian_dist main non-free contrib
+	# deb-src http://archive.debian.org/debian/ $debian_dist main non-free contrib
+	_END_
+fi
+
+dest_file=/etc/apt/sources.list.d/celya.list
+if [ -e "$dest_file" ]; then
+    echo "WARNING: '$dest_file' already exists and is left unchanged" >&2
+else
+    cat <<- _END_ > "$dest_file"
+	# deb http://debian.celya.fr/ celya-$debian_dist main
+	# deb-src http://debian.celya.fr/ celya-$debian_dist main
+	_END_
+fi
+
+dest_file=/etc/apt/sources.list.d/dell.list
+if [ -e "$dest_file" ]; then
+    echo "WARNING: '$dest_file' already exists and is left unchanged" >&2
+else
+    cat <<- "_END_" > "$dest_file"
+	## Debian Squeeze & Ubuntu 10.4
+	## Faire : apt-key adv --keyserver pool.sks-keyservers.net --recv-key E74433E25E3D7775
+	# deb http://linux.dell.com/repo/community/deb/latest /
+	
+	## Debian Lenny ? Attention, sans doute plus supporté.
+	# deb http://ftp.sara.nl/pub/sara-omsa dell sara
+	_END_
+fi
+
+dest_file=/etc/apt/sources.list.d/opensips.list
+if [ -e "$dest_file" ]; then
+    echo "WARNING: '$dest_file' already exists and is left unchanged" >&2
+else
+    cat <<- _END_ > "$dest_file"
+	## Décommenter la ligne "deb ..." puis exécuter la commande "wget ..."
+	## ci-dessous avant de faire "aptitude update" :
+	## wget -O- http://apt.opensips.org/key.asc | apt-key add -
+	# deb http://apt.opensips.org/ stable18 main
+
+	## OBSOLETE, pour mémoire: debian.leurent.eu (Stable version)
+	# deb http://www.opensips.org/apt squeeze main
+	# deb-src http://www.opensips.org/apt squeeze main
+	_END_
+fi
+
+dest_file=/etc/apt/sources.list.d/deb-multimedia.list
+if [ -e "$dest_file" ]; then
+    echo "WARNING: '$dest_file' already exists and is left unchanged" >&2
+else
+    cat <<- _END_ > "$dest_file"
+	# Installer deb-multimedia-keyring
+	# deb http://deb-multimedia.org $debian_dist main non-free
+	# deb-src http://deb-multimedia.org $debian_dist main non-free
+
+	# ATTENTION: unstable
+	# deb http://www.debian-multimedia.org unstable main non-free
+	# deb-src http://www.debian-multimedia.org unstable main non-free
+	_END_
+fi
+
+################################################################################
+#
+#	Pré-chargement de modules au boot
+#
+
+if ! grep -F -x 8021q /etc/modules; then
+    cat <<- _END_ >> /etc/modules
+
+	#POSTINST# Ethernet VLANs
+	8021q
+	_END_
+fi
+
+################################################################################
+#
+#	Activation de la "completion" bash
+#
+
+# Commenté car déjà inclus par /root/.bashrc
+: sed -i '
+    # Look for a block that begins with the proper comment
+    /enable bash completion in interactive shells/,/^\s*$/ {
+	# Skip the first line
+	/enable bash completion/ b
+
+	# Uncomment the other lines
+	s/^#//
+    }
+' /etc/bash.bashrc

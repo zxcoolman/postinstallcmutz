@@ -1,0 +1,8 @@
+# escape %^M
+startup_message off
+backtick 1 0 3600 $HOME/whereami
+caption always "%-Lw%{= BW}%50>%n %u %t%{-}%+Lw%< %=%{=b}%1`%{=r} %= Load: %l %= %D %d %M %c"
+# hardstatus string "%H - %1`"
+hardstatus string "%1`"
+msgminwait 5
+msgwait 999999

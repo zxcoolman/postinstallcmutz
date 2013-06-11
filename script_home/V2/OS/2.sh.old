@@ -1,0 +1,27 @@
+#!/bin/bash
+#
+#	TODO:
+#	- Suivre la procédure du wiki
+#	- Configurer postfix pour un usage local+distant pour root
+#	- Configurer Nagios
+
+set -ue
+export LC_ALL=C
+
+################################################################################
+#
+#	Configuration de logrotate
+#
+
+wtmp_rotate=18
+bak_ext=$(date +.%F-%H-%M)
+logrotate_conf=/etc/logrotate.conf
+
+sudo sed --regexp-extended --in-place="$bak_ext" "
+    /^\s*rotate\s+\s*$wtmp_rotate\s*$/ b
+    s/^(\s*)(rotate\s+.*)/\1#POSTINST# \2\n\1rotate $wtmp_rotate/
+" "$logrotate_conf"
+
+if cmp -s "$logrotate_conf$bak_ext" "$logrotate_conf"; then
+    mv "$logrotate_conf$bak_ext" "$logrotate_conf"
+fi

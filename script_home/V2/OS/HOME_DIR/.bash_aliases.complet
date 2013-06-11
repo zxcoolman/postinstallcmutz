@@ -1,0 +1,131 @@
+alias apt-cache-depends-recurse="apt-cache depends --recurse --no-recommends --no-suggests --no-conflicts --no-breaks --no-replaces --no-enhances"
+
+alias tcpdump='tcpdump -e -U -s1600'
+
+#alias GET_with_headers="GET -USe"
+#alias POST_with_headers="POST -USe"
+# alias wget_with_headers='2>&1 wget --output-document=- --server-response --load-cookies /tmp/cookies.txt --save-cookies /tmp/cookies.txt --keep-session-cookies --progress=dot:mega'
+#alias wget_with_headers='2>&1 wget --output-document=- --server-response --load-cookies /tmp/cookies.txt --save-cookies /tmp/cookies.txt --progress=dot:mega --user-agent="${fake_user_agent:-Mozilla/5.0 (X11; U; Linux x86_64; en-us)}"'
+#alias curl_with_headers='2>&1 curl --dump-header - --cookie /tmp/cookies.txt --cookie-jar /tmp/cookies.txt'
+#alias wget_rc='wget --user-agent="${fake_user_agent:-Mozilla/5.0 (X11; U; Linux x86_64; en-us)}" --continue --tries=1000 --timeout=15 --no-parent --timestamping --convert-links --recursive --retr-symlinks --level=0'
+#alias wget_aastra='wget -O- --no-check-certificate --user-agent="Aastra WGET"'
+#alias wget_yealink='wget -O- --no-check-certificate --user-agent="yealink WGET"'
+
+function ssh_screen()
+{
+    local dest="${@: -1}"
+    [[ "$dest" != *@* ]] && dest="root@$dest"
+    [[ "$dest" != *.* ]] && dest="$dest.priv.celya.fr"
+    ssh -A -C -t "${@:1: $(($#-1))}" "$dest" 'screen -s /bin/bash -S cmutz@celya -D -xRR || /bin/bash || /bin/sh'
+}
+
+function find_repo()
+{
+    local paths=()
+
+    while [ $# -gt 0 ]; do
+	[[ "$1" == -* ]] && break
+	paths[ ${#paths[*]} ]="$1"
+	shift
+    done
+    [ ${#paths[*]} -eq 0 ] && paths=( . )
+
+    find "${paths[@]}" -type d "(" -name .git -o -name .hg -o -name .svn ")" -prune -false -o "$@"
+}
+
+alias diff_repo="diff -r -u --exclude=.git --exclude=.hg --exclude=.svn"
+alias  grep_repo="grep --color=auto --exclude-dir=.git --exclude-dir=.hg --exclude-dir=.svn --recursive --no-messages --binary-files=without-match"
+alias egrep_repo="grep_repo -E"
+alias fgrep_repo="grep_repo -F"
+
+function url_decode()
+{ 
+    printf "${@//%/\\x}\n"
+}
+
+function url_encode()
+{ 
+    local url=$(echo -e $(od -tx1 -w100000 <<< "$1" | sed -r 's/^\S+|...$//g; s/3[0-9]|[46][1-9a-f]|[57][0-9a]/\\x&/g; s/\<[^x]/%&/g; s/ //g; q'))
+    local n=${2:-1}
+    for ((n=n-1; n>0; n--)); do
+	url=${url//%/%25}
+    done
+    echo "$url"
+}
+
+alias suweb='su - -s /bin/bash'
+
+# alias vi=vim
+alias viewdiff='vimdiff -R'
+alias wman=w3mman
+
+alias hg_info='hg sum'
+alias hg_stat_dram='hg stat -dram'
+function hg_list_changed_files()
+{
+    if [ $# -gt 0 ] && [ "$1" = "-h" -o "$1" == "--help" ]; then
+	echo "Les options sont celles de 'hg log'. L'option --no-merges est active par défaut. Des options intéressantes sont --only-branch et --user"
+    else
+	hg log --no-merges "$@" | sed -r '/^files:\s*/ !d; s///; s/\s+/\n/g' | LC_ALL=C sort -u
+    fi
+}
+
+function dpkg-checkbuilddeps_pkg_list()
+{
+    LC_ALL=C dpkg-checkbuilddeps "$@" 2>&1 \
+    | sed -n '/Unmet/ s/^dpkg-checkbuilddeps: Unmet build dependencies: \|([^)]*)//gp' \
+    | sed -r 's/\>\s+([^ |])/\n\1/g'
+}
+
+function chrt_list_non_default()
+{
+    local pid name policy prio
+
+    printf "%5s %3s %-12s %-32s\n" PID Pri Policy Name
+    ls -d /proc/[0-9]* \
+    | cut -d/ -f3 \
+    | sort -n \
+    | while read pid; do
+	[ ! -d "/proc/$pid" ] && continue
+	name=$(awk '/^Name:/ { print $2; exit }' "/proc/$pid/status")
+	eval $(chrt -p "$pid" | awk 'NR==1 { print "policy=" $NF } NR==2 { print "prio=" $NF }')
+	if [ "$policy" != "SCHED_OTHER" -o "$prio" != "0" ]; then
+	    printf "%5d %3d %-12s %-32s\n" "$pid" "$prio" "$policy" "$name"
+	fi
+    done
+}
+
+# Recherche dans le fichier de lease d'un serveur DHCP l'adresse IP d'une machine dont on connaît l'adresse MAC
+function dhcp_mac_to_ip()
+{
+    local mac=$1
+    local lease_file=/var/lib/dhcp/dhcpd.leases
+
+    if [ -z "$mac" ]; then
+	echo "Usage: dhcp_mac_to_ip adresse_MAC" >&2
+	return 1
+    elif ! [ -f "$lease_file" ]; then
+	echo "ERREUR: pas de fichier '$lease_file' => est-ce qu'un serveur DHCP tourne vraiment sur cette machine ?" >&2
+	return 2
+    fi
+
+    sed -r -n '
+	# On mémorise l adresse IP pour plus tard
+	/^lease/ { h; n; }
+
+	# Si l adresse MAC correspond, on affiche l addresse IP mémorisée
+	/hardware ethernet '"$mac"'/ { g; s/lease ([0-9.]*).*/\1/p; }
+    ' "$lease_file" \
+    | tail -n 1		# On ne garde que la dernière, la plus récente
+}
+
+function mysql_maintenance()
+{
+    local default_opts="--pager"
+    local defaults_file=/etc/mysql/debian.cnf
+    [ -r "$defaults_file" ] && default_opts="--defaults-extra-file=$defaults_file $default_opts"
+    mysql $default_opts "$@"
+}
+
+# DERNIÈRE LIGNE !
+[ -r ~/.bash_aliases_local ] && source ~/.bash_aliases_local

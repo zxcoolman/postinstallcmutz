@@ -1,0 +1,35 @@
+########################################
+	TODO
+Auteur : Mutz Clement
+Date derniere modification : 06/06/2013
+########################################
+
+WARNING !!!!!!!!!!!!!!!!!
+Bien lire le TODO avant d'executer update.sh
+
+Le fichier update.sh effectue plusieurs étapes décomposer comme suit :
+
+-----------------------------------
+1°- Fichier de configuration home
+
+Adapter les fichiers suivants en fonction de son utilisation.
+.bashrc
+.screenrc
+bin/whereami
+
+-----------------------------------
+2°- execution des scripts d'installations
+
+Ensuite dans le dossier OS, les scripts sont executés dans leurs ordre en fonction du numéro, du nom distributions et enfin de la version de la dsitrib.
+
+exemple : 0.sh -> 1.sh -> 1_ubuntu.sh -> 1_ubuntu_quantal.sh
+
+
+Par défault les numéros des fichiers correspond :
+
+0 -> mis à jour des paquets
+1 -> installation des paquets
+2 -> ajout de dépôts
+
+#### A FAIRE ####
+Logger dans un fichier les log écrans
